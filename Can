@@ -1,0 +1,267 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Создание окна
+local Window = Rayfield:CreateWindow({
+    Name = "Прослушка",
+    LoadingTitle = "Прослушка",
+    LoadingSubtitle = "by Can1488",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "VoicechatSpyConfig",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false,
+})
+
+-- Создание вкладки
+local MainTab = Window:CreateTab("Главная", nil)
+
+-- Глобальные переменные
+local LP = game:GetService('Players').LocalPlayer
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local SoundService = game:GetService('SoundService')
+local SpiedPlayers = {}
+local SpiedPlayersCount = 0
+local Exiting = false
+
+-- Создание настроек
+local SettingsSection = MainTab:CreateSection("Настройки")
+
+local TrackVoice3dToggle = MainTab:CreateToggle({
+    Name = "Track Voice 3D",
+    CurrentValue = true,
+    Flag = "TrackVoice3d",
+    Callback = function(Value)
+        getgenv().VoicechatSpySettings = getgenv().VoicechatSpySettings or {}
+        getgenv().VoicechatSpySettings.TrackVoice3d = Value
+    end,
+})
+
+local FollowDistanceSlider = MainTab:CreateSlider({
+    Name = "Follow Distance",
+    Range = {1, 50},
+    Increment = 1,
+    Suffix = "studs",
+    CurrentValue = 10,
+    Flag = "FollowDistance",
+    Callback = function(Value)
+        getgenv().VoicechatSpySettings = getgenv().VoicechatSpySettings or {}
+        getgenv().VoicechatSpySettings.FollowDistance = Value
+    end,
+})
+
+-- Инициализация настроек
+getgenv().VoicechatSpySettings = {
+    TrackVoice3d = TrackVoice3dToggle.CurrentValue,
+    FollowDistance = FollowDistanceSlider.CurrentValue
+}
+
+-- Создание раздела для игроков
+local PlayersSection = MainTab:CreateSection("Игроки")
+
+-- Таблица для хранения элементов игроков
+local PlayerElements = {}
+
+-- Функция проверки, отслеживается ли игрок
+local function IsPlayerSpied(Player)
+    for _, v in next, SpiedPlayers do
+        if v == Player then
+            return true
+        end
+    end
+    return false
+end
+
+-- Функция отключения слежки за игроком
+local function UnspyVoicechat(Player)
+    for _, v in next, SpiedPlayers do
+        if v == Player then
+            SpiedPlayers[_] = nil
+            break
+        end
+    end
+end
+
+-- Функция обновления счетчика
+local function UpdateCounter()
+    -- Можно добавить отображение счетчика где-то в интерфейсе
+    -- Например, в названии окна или отдельной метке
+end
+
+-- Создание элемента для игрока
+local function CreatePlayerElement(Player)
+    if Player == LP then return end
+    
+    local buttonName = Player.DisplayName ~= Player.Name and Player.DisplayName.." @"..Player.Name or Player.Name
+    
+    local PlayerButton = MainTab:CreateButton({
+        Name = buttonName,
+        Callback = function()
+            if IsPlayerSpied(Player) then
+                -- Отключить слежку
+                UnspyVoicechat(Player)
+                PlayerElements[Player].ParentButton:Set("Отключено")
+                Rayfield:Notify({
+                    Title = "Voicechat Spy",
+                    Content = "Отключена прослушка за "..Player.Name,
+                    Duration = 2,
+                })
+            else
+                -- Включить слежку
+                table.insert(SpiedPlayers, Player)
+                SpiedPlayersCount = SpiedPlayersCount + 1
+                PlayerElements[Player].ParentButton:Set("✓ Включено")
+                
+                -- Запуск процесса слежки
+                task.spawn(function()
+                    local CurrentCamera = workspace.CurrentCamera
+                    local Character = Player.Character
+                    local VoiceOrigin = Character and Character:FindFirstChild('HumanoidRootPart')
+
+if CurrentCamera and Character and VoiceOrigin then
+                        while IsPlayerSpied(Player) and Player.Parent and CurrentCamera.Parent and Character.Parent and VoiceOrigin.Parent do
+                            if getgenv().VoicechatSpySettings.TrackVoice3d then
+                                SoundService:SetListener(
+                                    Enum.ListenerType.CFrame,
+                                    VoiceOrigin.CFrame * CFrame.new((VoiceOrigin.Velocity + VoiceOrigin.RotVelocity) + 
+                                    (CFrame.new(VoiceOrigin.Velocity + VoiceOrigin.RotVelocity).lookVector * 
+                                    getgenv().VoicechatSpySettings.FollowDistance))
+                                )
+                            else
+                                SoundService:SetListener(Enum.ListenerType.CFrame, VoiceOrigin.CFrame)
+                            end
+                            RunService.Heartbeat:Wait()
+                            SoundService:SetListener(Enum.ListenerType.Camera)
+                            RunService.RenderStepped:Wait()
+                        end
+                        SoundService:SetListener(Enum.ListenerType.Camera)
+                    end
+                end)
+                
+                Rayfield:Notify({
+                    Title = "Voicechat Spy",
+                    Content = "Включена прослушка за "..Player.Name,
+                    Duration = 2,
+                })
+            end
+            UpdateCounter()
+        end,
+    })
+    
+    PlayerElements[Player] = {
+        ParentButton = PlayerButton
+    }
+end
+
+-- Создание раздела с действиями
+local ActionsSection = MainTab:CreateSection("Действия")
+
+local SpyAllButton = MainTab:CreateButton({
+    Name = "Прослушивать всех",
+    Callback = function()
+        for _, Player in ipairs(Players:GetPlayers()) do
+            if Player ~= LP and not IsPlayerSpied(Player) then
+                table.insert(SpiedPlayers, Player)
+                if PlayerElements[Player] then
+                    PlayerElements[Player].ParentButton:Set("✓ Включено")
+                end
+            end
+        end
+        SpiedPlayersCount = #SpiedPlayers
+        UpdateCounter()
+        Rayfield:Notify({
+            Title = "Voicechat Spy",
+            Content = "Включена прослушка за всеми игроками",
+            Duration = 3,
+        })
+    end,
+})
+
+local UnspyAllButton = MainTab:CreateButton({
+    Name = "Выключить прослушивание за всеми",
+    Callback = function()
+        SpiedPlayers = {}
+        SpiedPlayersCount = 0
+        for _, element in pairs(PlayerElements) do
+            element.ParentButton:Set("Отключено")
+        end
+        UpdateCounter()
+        Rayfield:Notify({
+            Title = "Voicechat Spy",
+            Content = "Отключена прослушка за всеми игроками",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Функция обновления списка игроков
+local function UpdatePlayersList()
+    -- Очистка старых элементов (в Rayfield нельзя удалять элементы динамически)
+    -- Вместо этого будем пересоздавать вкладку или использовать другую стратегию
+end
+
+-- Создание элементов для текущих игроков
+for _, Player in ipairs(Players:GetPlayers()) do
+    CreatePlayerElement(Player)
+end
+
+-- Обработка добавления новых игроков
+Players.PlayerAdded:Connect(function(Player)
+    if not Exiting then
+        CreatePlayerElement(Player)
+    end
+end)
+
+-- Обработка удаления игроков
+Players.PlayerRemoving:Connect(function(Player)
+    if not Exiting then
+        UnspyVoicechat(Player)
+        if PlayerElements[Player] then
+            PlayerElements[Player].ParentButton:Destroy()
+            PlayerElements[Player] = nil
+        end
+        UpdateCounter()
+    end
+end)
+
+-- Добавление информации о количестве
+local InfoSection = MainTab:CreateSection("Информация")
+
+local CountLabel = MainTab:CreateLabel("Прослушивается: 0 игроков")
+
+-- Функция для обновления счетчика
+function UpdateCounter()
+    CountLabel:Set("Прослушивается: "..SpiedPlayersCount.." игроков")
+end
+
+-- Кнопка выхода
+local ExitSection = MainTab:CreateSection("Выход")
+
+local ExitButton = MainTab:CreateButton({
+    Name = "Выход",
+    Callback = function()
+        Exiting = true
+        SpiedPlayers = {}
+        SpiedPlayersCount = 0
+        SoundService:SetListener(Enum.ListenerType.Camera)
+        Rayfield:Notify({
+            Title = "Voicechat Spy",
+            Content = "Прослушка выключена",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Уведомление о запуске
+Rayfield:Notify({
+    Title = "Voicechat Spy v1",
+    Content = "Прослушка включена",
+    Duration = 5,
+    Image = 4483362458,
+})
